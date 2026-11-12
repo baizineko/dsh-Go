@@ -21,8 +21,8 @@ python3 -I runtime/lib/input_store.py inventory --all-locks > runtime-inputs-all
 
 ```sh
 python3 -I runtime/lib/input_store.py import --store /absolute/input-store \
-  /absolute/recovered/proot_5.1.107.98_aarch64.deb \
-  /absolute/recovered/proot_5.1.107.98_x86_64.deb
+  /absolute/recovered/proot_5.1.107.102_aarch64.deb \
+  /absolute/recovered/proot_5.1.107.102_x86_64.deb
 python3 -I runtime/lib/input_store.py collect --store /absolute/input-store
 python3 -I runtime/lib/input_store.py verify --store /absolute/input-store
 ```
@@ -60,7 +60,7 @@ python3 -I runtime/lib/input_store.py collect --store /absolute/input-store \
 以下仅记录 `8020294de0d3e0d286ddf392da1b411f69e32eca` 的源 pin/锁没有提供的材料，不作法律判断，也不成为导出或发布门禁：
 
 - `runtime/build-runtime.sh` 的 Ubuntu base pin 没有归档内组件、版本与对应源码清单；`runtime/locks/ubuntu-noble-{arm64,amd64}.json` 只记录额外 deb 的二进制版本、摘要和大小，不能替代基础归档清点，也没有精确 source package 与打包材料。
-- 同一脚本的 Termux `proot`、`libtalloc`、`libandroid-shmem` pin 没有实际 recipe、补丁与构建材料的对应记录。已有 `proot-v5.1.107.98.zip` 源码 pin 可作为来源材料，不能据它推定其余打包材料齐全。
+- 同一脚本的 Termux `proot`、`libtalloc`、`libandroid-shmem` pin 没有实际 recipe、补丁与构建材料的对应记录。已有 `proot-v5.1.107.102.zip` 源码 pin 可作为来源材料，不能据它推定其余打包材料齐全。
 - Node 与 Python 原始归档的 pin 没有复合归档组件及其对应源码/构建材料清单。
 - `runtime/locks/dsh-0.2.2-rc.1/package-lock.json` 中 `@img/sharp-libvips-*`、`@img/sharp-win32-*`、`@img/sharp-wasm32` 声明含 LGPL，`@deepseek-ai/libreoffice-kit*` 声明 MPL；锁有包版本和 SRI，但没有匹配归档内实际组件的源码与构建材料记录。`inventory` 可列出当前各平台引用，不能仅按采集机器的平台略过备份中的其它包。
 
