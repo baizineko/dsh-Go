@@ -121,6 +121,34 @@ class RootStarter(private val context: Context, private val onChanged: () -> Uni
         return ok
     }
 
+    /**
+     * Grant every fixed runtime permission this app can hold, through the connected root
+     * process. Returns the granted and refused sets, or null when no root channel exists.
+     * Never starts or retries su: the caller decides when root is prepared.
+     */
+    fun grantAppPermissions(): GrantReport? {
+        val current = connect() ?: return null
+        val response = current.execute(Bundle().apply {
+            putString(Proto.OP, Proto.OP_GRANT_APP_PERMISSIONS)
+            putInt(Proto.USER, Process.myUid() / 100000)
+        })
+        if (response.getBoolean(Proto.OK).not()) {
+            synchronized(guard) { if (channel === current) state.note("rootGrantFailed") }
+            onChanged()
+            return null
+        }
+        onChanged()
+        return GrantReport(
+            granted = response.getStringArray(Proto.GRANTED)?.toList().orEmpty(),
+            denied = response.getStringArray(Proto.DENIED)?.toList().orEmpty(),
+        )
+    }
+
+    /** Outcome of one bulk grant; the denied half is what the user still has to do by hand. */
+    data class GrantReport(val granted: List<String>, val denied: List<String>) {
+        val complete: Boolean get() = denied.isEmpty()
+    }
+
     /** Revokes only a still-pending attempt whose own caller no longer wants it. */
     fun cancelUnwantedPending() {
         var closing: RootProcess? = null

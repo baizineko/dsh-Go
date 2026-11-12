@@ -318,6 +318,11 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
                 control.background.cancelUnwantedPending()
                 async(result) { if (live()) control.background.prepareRoot(live) else cancelledSelection() }
             }
+            // 「Root 高级授权模式」: one tap grants the whole fixed permission list over root.
+            "grantRootPermissions" -> {
+                val live = stillWanted(privilegedActions.snapshot())
+                async(result) { if (live()) control.background.grantRootPermissions() else cancelledSelection() }
+            }
             "adbStartPairing" -> async(result) { control.background.adbStartPairing() }
             "adbPair" -> async(result) {
                 val code = call.argument<String>("code")?.trim().orEmpty()

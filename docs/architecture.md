@@ -11,6 +11,8 @@
 | DSH 客户端 | 纯 Dart 包 `packages/dsh_client` | 无 Flutter 依赖，可单测；本地与远程共用 |
 | 本地运行时 | Ubuntu 24.04 base + Node + `@deepseek-ai/dsh`，经 proot 运行 | App 自带，免 Root、免 Termux |
 
+「Root 高级授权模式」是可选的加强项，不改变上面这条：proot 仍在普通用户命名空间里跑，开关只做两件事——通过已连接的 root 通道一次性授予 App 固定白名单里的运行时权限（`Proto.RUNTIME_PERMISSIONS`，经 `permissionmgr` / `package` 的 `grantRuntimePermission`，`MANAGE_EXTERNAL_STORAGE` 走 appops），以及在托管的 `AGENTS.md` 里加一段说明，让模型知道自己可以用 `su` 并在方案选择上偏向 root 直连。它和「不打扰模式」的 root 通道解耦，也不自行重启 su。
+
 ## 目录
 
 ```

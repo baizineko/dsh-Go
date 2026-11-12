@@ -67,6 +67,8 @@ class RuntimeController private constructor(private val app: Context) : DshProce
     @Volatile private var pendingPhoneStorage = false
     /** Whether the managed AGENTS.md tells the model about ```dsh-ui views (settings, on by default). */
     @Volatile private var pendingVisualReplies = true
+    /** Whether 「Root 高级授权模式」 is on for the next launch: the root paragraph and its grants. */
+    @Volatile private var pendingRootMode = false
 
     // Safe mode and failure detection. State that must survive the app being killed lives in [prefs].
     @Volatile private var safeState = SafeState.parse(prefs.getString(K_SAFE_STATE, null))
@@ -173,6 +175,16 @@ class RuntimeController private constructor(private val app: Context) : DshProce
     )
     private fun tawcEngineUnavailable(): String? =
         TawcrootLaunch.unavailable(app.applicationInfo.nativeLibraryDir, android.os.Build.VERSION.SDK_INT)
+
+    /**
+     * Whether 「Root 高级授权模式」 may be announced: the option is on *and* this app really
+     * holds the fixed permission list. Claiming root in the prompt without the grants would make
+     * the model choose `su` paths it cannot finish, so the check reads the live permission state
+     * rather than the stored switch.
+     */
+    private fun rootGranted(): Boolean = runCatching {
+        PhoneControl.get(app).background.rootPermissionsGranted()
+    }.getOrDefault(false)
 
     private fun directEngineAvailable(): Boolean = runCatching {
         manifest.raw.optJSONObject("directEngine")?.optInt("schema") == 2
@@ -282,9 +294,11 @@ class RuntimeController private constructor(private val app: Context) : DshProce
         phoneStorage: Boolean = false,
         mode: String? = null,
         visualReplies: Boolean = pendingVisualReplies,
+        rootMode: Boolean = pendingRootMode,
     ) {
         pendingPhoneStorage = phoneStorage
         pendingVisualReplies = visualReplies
+        pendingRootMode = rootMode
         if (phase == Phase.RUNNING || phase == Phase.STARTING) return
         pendingEnv = env
         val next = SafePolicy.onStartRequest(safeState, mode)
@@ -482,6 +496,8 @@ class RuntimeController private constructor(private val app: Context) : DshProce
         error = null
         val safe = safeState == SafeState.ON
         runSafe = safe
+        // Read once: start() may overwrite the fields while this launch is queued.
+        val rootMode = pendingRootMode
         val gen = ++runGen
         readyAt = null
         healthyAt = null
@@ -561,7 +577,8 @@ class RuntimeController private constructor(private val app: Context) : DshProce
                 p.start(env, if (storage) PhoneStorage.binds() else emptyList(), safe, phone, direct.requested, direct.failed, searchOverlay, authOverlay, speechOverlay,
                     tawcEngine = tawc.saved == true, tawcFailed = tawc.failed) { actualDirect ->
                     // SafeMode.prepare writes its own briefing; leave the original home untouched.
-                    if (!safe) GuestSetup.writeAgentsMd(installer.rootfs, storage, phone, pendingVisualReplies, actualDirect)
+                    if (!safe) GuestSetup.writeAgentsMd(installer.rootfs, storage, phone, pendingVisualReplies, actualDirect,
+                        rootMode = rootMode && rootGranted())
                 }
                 if (phone) PhoneControl.get(app).launched(p.phoneMounted)
             } catch (e: Throwable) {

@@ -159,6 +159,16 @@ abstract final class RiskNotices {
     action: appL10n.phonePrivilegedRootPrepare,
   );
 
+  /// 设置 › 权限 › Root 高级授权模式. Elevated to high: it is not one permission but
+  /// the whole list plus `su`, so the model may act anywhere on the real system.
+  static RiskNotice get rootMode => RiskNotice(
+    id: 'permission.root-mode',
+    level: RiskLevel.high,
+    title: appL10n.rootModeRiskTitle,
+    body: appL10n.rootModeRiskBody,
+    action: appL10n.rootModeRiskAction,
+  );
+
   /// 宠物 › App 外显示, before the trip to 「显示在其他应用上层」.
   static RiskNotice get petOverlay => RiskNotice(
     id: 'pets.overlay-permission',

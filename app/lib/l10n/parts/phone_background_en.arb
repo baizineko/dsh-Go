@@ -22,5 +22,15 @@
   "phonePrivilegedGrantSuiPermission": "Authorize Sui, then grant",
   "phonePrivilegedSuggested": "Suggested",
   "phonePrivilegedRootRiskTitle": "Give DSH Go root access?",
-  "phonePrivilegedRootRiskBody": "Your root manager (Magisk, KernelSU or APatch) will ask you. If you allow it, DSH Go runs its own background service as root. It asks again on its own after a disconnect or restart only with “Keep root channel” on."
+  "phonePrivilegedRootRiskBody": "Your root manager (Magisk, KernelSU or APatch) will ask you. If you allow it, DSH Go runs its own background service as root. It asks again on its own after a disconnect or restart only with “Keep root channel” on.",
+  "rootModeTitle": "Root advanced access",
+  "rootModeSubtitle": "Grant every permission at once with root and let the AI know it can use su",
+  "rootModeRiskTitle": "Turn on root advanced access?",
+  "rootModeRiskBody": "DSH Go will grant itself every common permission through root at once (storage and all files, photos, recording, camera, notifications, location, Bluetooth, contacts, calendar, SMS, phone), and will tell the AI in its run instructions that root is available. The AI may then run commands as root on the real system with su: reading system directories, changing system settings, restarting services. This is far more dangerous than a normal grant. Turn it on only if you fully trust the AI acting on this device.",
+  "rootModeRiskAction": "Request root and grant all",
+  "rootModeGranted": "All permissions granted",
+  "rootModePartial": "Some permissions were refused; enable them by hand:",
+  "rootModeFailed": "Root was not obtained:",
+  "rootModeRestart": "On. The AI learns about root after the engine restarts.",
+  "rootModeOff": "Off. Takes effect after the engine restarts."
 }

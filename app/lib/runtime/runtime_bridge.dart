@@ -579,17 +579,20 @@ class RuntimeBridge {
   /// [phoneStorage] mounts the phone's shared storage at /sdcard (needs [requestStorage] first).
   /// [mode] null keeps the current mode; [EngineMode.normal] while in safe mode starts the
   /// two-minute trial back in normal mode. [visualReplies] writes the dsh-ui section
-  /// into the managed AGENTS.md.
+  /// into the managed AGENTS.md. [rootMode] writes the root paragraph there and
+  /// asks the native side to keep the root channel ready.
   Future<void> start({
     Map<String, String> env = const {},
     bool phoneStorage = false,
     EngineMode? mode,
     bool visualReplies = true,
+    bool rootMode = false,
   }) => _methods.invokeMethod<void>('start', {
     'env': env,
     'phoneStorage': phoneStorage,
     'mode': mode?.name,
     'visualReplies': visualReplies,
+    'rootMode': rootMode,
   });
 
   Future<LastKnownGood> lastKnownGood() async {

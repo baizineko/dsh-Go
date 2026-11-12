@@ -886,14 +886,26 @@ class PhoneFinish {
 
 /// `{ok, reason?}` replies.
 class PhoneResult {
-  const PhoneResult(this.ok, [this.reason, this.pending = false]);
+  const PhoneResult(this.ok, [this.reason, this.pending = false, this.denied = const []]);
 
-  factory PhoneResult.fromMap(Map<Object?, Object?> m) =>
-      PhoneResult(_flag(m['ok']), _text(m['reason']), _flag(m['pending']));
+  factory PhoneResult.fromMap(Map<Object?, Object?> m) => PhoneResult(
+    _flag(m['ok']),
+    _text(m['reason']),
+    _flag(m['pending']),
+    switch (m['denied']) {
+      final List<Object?> list => [for (final e in list) if (e is String) e],
+      _ => const [],
+    },
+  );
 
   final bool ok;
   final String? reason;
   final bool pending;
+
+  /// Permissions the root grant refused (`grantRootPermissions` only): the user
+  /// still has to enable these by hand, so the UI names them instead of claiming
+  /// everything worked.
+  final List<String> denied;
 }
 
 /// Reply of `testScreen`: the main screen read once.
@@ -1474,6 +1486,10 @@ class PhoneChannel {
       _result('setBackgroundKeep', {'mode': mode.name, 'enabled': enabled});
 
   Future<PhoneResult> prepareRoot() => _result('prepareRoot');
+
+  /// 「Root 高级授权模式」: grants every fixed runtime permission through the root channel.
+  /// Refusals come back in [PhoneResult.denied].
+  Future<PhoneResult> grantRootPermissions() => _result('grantRootPermissions');
 
   Future<bool> requestPrivilegedPermission(String provider) =>
       _bool('requestShizukuPermission', {'provider': provider});

@@ -210,6 +210,19 @@ class PrivilegedDisplayCore internal constructor(
                 response.putBoolean(Proto.OK, true)
                 return response
             }
+            if (op == Proto.OP_GRANT_APP_PERMISSIONS) {
+                // Independent of display ownership and injection: only the fixed permission list
+                // for the fixed package is touched, so no tree or gate state can be disturbed.
+                val userId = request.getInt(Proto.USER)
+                val wanted = request.getStringArray(Proto.PERMISSIONS)?.toList() ?: Proto.RUNTIME_PERMISSIONS
+                if (wanted.isEmpty() || wanted.size > Proto.RUNTIME_PERMISSIONS.size ||
+                    wanted.any { it !in Proto.RUNTIME_PERMISSIONS }) throw Fault("invalidArguments")
+                val (granted, denied) = grantAppPermissions(userId, wanted)
+                response.putBoolean(Proto.OK, true)
+                response.putStringArray(Proto.GRANTED, granted.toTypedArray())
+                response.putStringArray(Proto.DENIED, denied.toTypedArray())
+                return response
+            }
             lock.withLock {
                 targetReply = targetReply || targetSequence != null
                 selfCheckReply = selfCheckReply || selfCheckOwner
@@ -2105,23 +2118,85 @@ class PrivilegedDisplayCore internal constructor(
      */
     @SuppressLint("PrivateApi")
     private fun grantSecureSettings(userId: Int) {
+        grantPermissions(userId, listOf(SecureSettingsGrant.PERMISSION)) { _, _ -> }
+    }
+
+    /**
+     * `pm grant` of every entry in [permissions] to this app, in [userId]. Same binder as
+     * [grantSecureSettings]; each permission is granted independently so one refusal (a
+     * signature-only permission, a policy restriction, a missing permission on this OS
+     * version) does not stop the rest. Returns what the manager accepted / refused.
+     */
+    @SuppressLint("PrivateApi")
+    private fun grantAppPermissions(userId: Int, permissions: List<String>): Pair<List<String>, List<String>> {
+        val granted = mutableListOf<String>()
+        val denied = mutableListOf<String>()
+        grantPermissions(userId, permissions) { permission, error ->
+            // MANAGE_EXTERNAL_STORAGE is declared but has no grantable state: `pm grant` reports
+            // success on some ROMs and failure on others while the app-op stays default either way,
+            // so the app-op is what decides here, not the grant call.
+            val applied = when {
+                permission == MANAGE_EXTERNAL_STORAGE -> allowAppOp(permission)
+                else -> error == null
+            }
+            if (applied) granted += permission else denied += permission
+        }
+        // Runtime grants cover the permission checks; the corresponding app-ops still decide
+        // behaviour for a few of them (graphics, notifications, exact alarms, overlays).
+        for ((permission, op) in APP_OP_FALLBACKS) {
+            if (permission in permissions && permission !in denied && permission != MANAGE_EXTERNAL_STORAGE)
+                allowAppOp(op)
+        }
+        return granted to denied
+    }
+
+    /**
+     * `appops set <package> <op> allow` through the binder AppOpsService uses. Best effort: a ROM
+     * that renamed or removed the op just refuses, which must not fail the whole grant.
+     */
+    @SuppressLint("PrivateApi")
+    private fun allowAppOp(op: String): Boolean = try {
+        val binder = Class.forName("android.os.ServiceManager").getMethod("getService", String::class.java)
+            .invoke(null, "appops") as IBinder
+        val manager = Class.forName("com.android.internal.app.IAppOpsService\$Stub")
+            .getMethod("asInterface", IBinder::class.java).invoke(null, binder)
+        val set = manager.javaClass.methods.first { it.name == "setMode" && it.parameterTypes.size == 4 }
+        // (String op, int uid, String packageName, int mode), mode 0 == MODE_ALLOWED. The op row
+        // is keyed by uid, and this process is the app, so the package is the only extra identity.
+        set.invoke(manager, op, Process.myUid(), Proto.APP_PACKAGE, 0)
+        true
+    } catch (_: Throwable) {
+        false
+    }
+
+    /**
+     * Shared binder path for `pm grant`: IPackageManager up to Android 10, IPermissionManager
+     * from 11. [onResult] receives the permission and null on success, or the thrown error.
+     */
+    @SuppressLint("PrivateApi")
+    private fun grantPermissions(userId: Int, permissions: List<String>, onResult: (String, Throwable?) -> Unit) {
         val (service, type) = if (Build.VERSION.SDK_INT >= 30) "permissionmgr" to "android.permission.IPermissionManager"
             else "package" to "android.content.pm.IPackageManager"
         val binder = Class.forName("android.os.ServiceManager").getMethod("getService", String::class.java)
             .invoke(null, service) as IBinder
         val manager = Class.forName("$type\$Stub").getMethod("asInterface", IBinder::class.java).invoke(null, binder)
         val grant = manager.javaClass.methods.first { it.name == "grantRuntimePermission" }
-        val permission = SecureSettingsGrant.PERMISSION
-        val args = when {
-            grant.parameterTypes.size == 3 -> arrayOf<Any>(Proto.APP_PACKAGE, permission, userId)
+        for (permission in permissions) {
             // VirtualDeviceManager.PERSISTENT_DEVICE_ID_DEFAULT, or Context.DEVICE_ID_DEFAULT.
-            grant.parameterTypes[2] == String::class.java -> arrayOf<Any>(Proto.APP_PACKAGE, permission, "default:0", userId)
-            else -> arrayOf<Any>(Proto.APP_PACKAGE, permission, 0, userId)
-        }
-        try {
-            grant.invoke(manager, *args)
-        } catch (e: InvocationTargetException) {
-            throw e.targetException
+            val args = when {
+                grant.parameterTypes.size == 3 -> arrayOf<Any>(Proto.APP_PACKAGE, permission, userId)
+                grant.parameterTypes[2] == String::class.java -> arrayOf<Any>(Proto.APP_PACKAGE, permission, "default:0", userId)
+                else -> arrayOf<Any>(Proto.APP_PACKAGE, permission, 0, userId)
+            }
+            val error = try {
+                grant.invoke(manager, *args)
+                null
+            } catch (e: InvocationTargetException) {
+                e.targetException
+            } catch (e: ReflectiveOperationException) {
+                e
+            }
+            onResult(permission, error)
         }
     }
 
@@ -2141,6 +2216,17 @@ class PrivilegedDisplayCore internal constructor(
     }
 
     companion object {
+        private const val MANAGE_EXTERNAL_STORAGE = "android.permission.MANAGE_EXTERNAL_STORAGE"
+
+        /**
+         * Permissions whose real gate is an app-op rather than the runtime grant. Only ops that
+         * exist across the supported range are listed; an unknown op is refused, not fatal.
+         */
+        private val APP_OP_FALLBACKS = listOf(
+            MANAGE_EXTERNAL_STORAGE to "MANAGE_EXTERNAL_STORAGE",
+            "android.permission.POST_NOTIFICATIONS" to "POST_NOTIFICATION",
+        )
+
         private val PACKAGE = Regex("[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+")
         private val FLAG_NAMES = listOf(
             "PUBLIC", "OWN_CONTENT_ONLY", "SUPPORTS_TOUCH", "DESTROY_CONTENT_ON_REMOVAL",

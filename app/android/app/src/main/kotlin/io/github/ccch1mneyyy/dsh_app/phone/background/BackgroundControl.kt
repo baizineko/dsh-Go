@@ -727,6 +727,30 @@ class BackgroundControl private constructor(context: Context) {
 
     fun rootGrantSelected(): Boolean = rootSelected
 
+    /**
+     * 「Root 高级授权模式」: grant every fixed runtime permission to this app through root.
+     * Requires a prepared root channel ([prepareRoot] first); it never starts or retries su
+     * itself, so a declined prompt stays declined. Returns the outcome for the UI to show.
+     */
+    fun grantRootPermissions(): Map<String, Any?> {
+        if (!beginTransportUse()) return transportBusy()
+        try {
+            val report = root.grantAppPermissions()
+                ?: return mapOf("ok" to false, "reason" to (rootReason() ?: "rootMissing"))
+            return mapOf(
+                "ok" to true,
+                "complete" to report.complete,
+                "granted" to report.granted,
+                "denied" to report.denied,
+            )
+        } finally { endTransportUse() }
+    }
+
+    /** True once this app really holds the fixed list, so the prompt may claim root capabilities. */
+    fun rootPermissionsGranted(): Boolean = Proto.RUNTIME_PERMISSIONS.all {
+        app.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED
+    }
+
     /** Detach invalidates only the caller's unpublished UI attempt, not borrowed healthy channels. */
     fun cancelUnwantedPending() {
         // Seal the original lane before revoking its presentation probe. Published peers stay pinned.

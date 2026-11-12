@@ -112,6 +112,7 @@ class RuntimePlugin :
                     phoneStorage = call.argument<Boolean>("phoneStorage") == true,
                     mode = call.argument<String>("mode"),
                     visualReplies = call.argument<Boolean>("visualReplies") != false,
+                    rootMode = call.argument<Boolean>("rootMode") == true,
                 )
                 result.success(null)
             }

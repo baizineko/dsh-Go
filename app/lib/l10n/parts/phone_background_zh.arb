@@ -22,5 +22,15 @@
   "phonePrivilegedGrantSuiPermission": "先授权 Sui，再授予权限",
   "phonePrivilegedSuggested": "建议",
   "phonePrivilegedRootRiskTitle": "给 DSH Go root 权限？",
-  "phonePrivilegedRootRiskBody": "root 管理器（Magisk、KernelSU 或 APatch）会弹窗问你。允许后，DSH Go 以 root 运行自己的后台服务；只有打开「保持 root 通道」，断开或重启后才会自己再去申请。"
+  "phonePrivilegedRootRiskBody": "root 管理器（Magisk、KernelSU 或 APatch）会弹窗问你。允许后，DSH Go 以 root 运行自己的后台服务；只有打开「保持 root 通道」，断开或重启后才会自己再去申请。",
+  "rootModeTitle": "Root 高级授权模式",
+  "rootModeSubtitle": "用 root 一次授予全部权限，并让 AI 知道自己可以 su",
+  "rootModeRiskTitle": "开启 Root 高级授权模式？",
+  "rootModeRiskBody": "DSH Go 会通过 root 一次授予自己全部常见权限（存储与所有文件、相册、录音、相机、通知、定位、蓝牙、通讯录、日历、短信、电话），并把「已获 root」写进给 AI 的运行说明。此后 AI 可以用 su 以 root 身份在真实系统上执行命令，能读取系统目录、修改系统设置、重启服务。这比普通授权危险得多：只在你完全信任这台设备上的 AI 操作时开启。",
+  "rootModeRiskAction": "申请 root 并授予全部权限",
+  "rootModeGranted": "已授予全部权限",
+  "rootModePartial": "部分权限未能授予，请手动开启：",
+  "rootModeFailed": "未能取得 root：",
+  "rootModeRestart": "已开启。重启引擎后 AI 才会知道自己有 root。",
+  "rootModeOff": "已关闭，重启引擎后生效。"
 }

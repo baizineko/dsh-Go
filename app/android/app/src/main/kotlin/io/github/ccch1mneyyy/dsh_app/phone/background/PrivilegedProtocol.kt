@@ -147,6 +147,47 @@ object Proto {
     const val USER = "user"
     const val APP_PACKAGE = "io.github.ccch1mneyyy.dsh_app"
 
+    /**
+     * 「Root 高级授权模式」: grants this app the fixed [RUNTIME_PERMISSIONS] list for [USER] and
+     * app-ops for the ones `pm grant` cannot set. [PERMISSIONS] echoes back what the caller asked
+     * for, [GRANTED] what this app holds afterwards. No package name ever comes from a caller.
+     */
+    const val OP_GRANT_APP_PERMISSIONS = "grantAppPermissions"
+    const val PERMISSIONS = "permissions"
+    const val GRANTED = "granted"
+    const val DENIED = "denied"
+
+    /**
+     * The only permissions this op knows. Each one is a normal app permission that the system
+     * would otherwise prompt for (or refuse to an app that never asks): media and storage,
+     * microphone, camera, notifications, location and the overlay/usage/exact-timer specials.
+     */
+    val RUNTIME_PERMISSIONS = listOf(
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.MANAGE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.BODY_SENSORS",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.NEARBY_WIFI_DEVICES",
+        "android.permission.ACTIVITY_RECOGNITION",
+        "android.permission.READ_CONTACTS",
+        "android.permission.READ_CALENDAR",
+        "android.permission.READ_SMS",
+        "android.permission.READ_PHONE_STATE",
+        "android.permission.CALL_PHONE",
+    )
+
     const val INJECT_OK = "injectOk"
     /** Gate only, with INJECT_OK false: the failing injection's [ERROR] code. Older cores omit it. */
     const val INJECT_ERROR = "injectError"

@@ -143,6 +143,54 @@ class _PermissionPageState extends ConsumerState<PermissionPage> {
     }
   }
 
+  /// Root 高级授权模式: one tap takes root and hands over the whole permission list,
+  /// then the engine restarts so the managed AGENTS.md can say root is available.
+  /// Turning it off only writes the switch: the next launch drops the paragraph.
+  Future<void> _onRootMode(bool next) async {
+    final l10n = context.l10n;
+    final notifier = ref.read(settingsProvider.notifier);
+    final phone = ref.read(phoneProvider.notifier);
+    if (!next) {
+      await notifier.setRootMode(false);
+      if (mounted) _toast(l10n.rootModeOff);
+      return;
+    }
+    if (!await confirmRisk(context, RiskNotices.rootMode) || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      // The root channel must exist before anything can be granted over it.
+      final rooted = await phone.prepareRoot();
+      if (!rooted.ok) {
+        if (mounted) _toast('${l10n.rootModeFailed}${rooted.reason ?? ''}');
+        return;
+      }
+      final granted = await phone.grantRootPermissions();
+      if (!mounted) return;
+      if (!granted.ok) {
+        _toast('${l10n.rootModeFailed}${granted.reason ?? ''}');
+        return;
+      }
+      await notifier.setRootMode(true);
+      if (!mounted) return;
+      if (granted.denied.isNotEmpty) {
+        // Refusals are real: saying 「全部已授予」 would make the model plan on a
+        // capability the app does not hold.
+        _toast('${l10n.rootModePartial}${granted.denied.map(_shortPermission).join('、')}');
+      } else {
+        _toast(l10n.rootModeGranted);
+      }
+      if (ref.read(localRuntimeProvider).status.phase == RuntimePhase.running && mounted) {
+        unawaited(EngineControl.restart(ProviderScope.containerOf(context, listen: false)));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// `android.permission.READ_SMS` reads better as `READ_SMS` in a short toast.
+  static String _shortPermission(String permission) =>
+      permission.startsWith('android.permission.') ? permission.substring(19) : permission;
+
   Future<void> _resetDefault(int revision) async {
     final client = ref.read(activeConnectionProvider).value?.client;
     if (client == null || _busy) return;
@@ -183,6 +231,10 @@ class _PermissionPageState extends ConsumerState<PermissionPage> {
     ];
 
     final phoneFiles = ref.watch(settingsProvider.select((s) => s.phoneStorage));
+    final rootMode = ref.watch(settingsProvider.select((s) => s.rootMode));
+    // The root switch is only honest on a local host that advertises the root channel.
+    final rootOffered = ref.watch(activeHostProvider).isLocal &&
+        ref.watch(phoneProvider.select((s) => s.status.background.supportedModes.contains(PhonePrivilegedMode.root)));
     final confirm = ref.watch(phoneProvider.select((s) => s.policies?.confirmMode));
     final phone = ListPageCard(
       title: l10n.hubPermissionPhone,
@@ -195,6 +247,16 @@ class _PermissionPageState extends ConsumerState<PermissionPage> {
               subtitle: l10n.hubSettingsPhoneFilesHint,
               onTap: () => unawaited(_onPhoneFiles(!phoneFiles)),
               trailing: Switch(value: phoneFiles, onChanged: (v) => unawaited(_onPhoneFiles(v))),
+            ),
+          ),
+        // Root 高级授权模式: root + the whole permission list + the root paragraph.
+        if (rootOffered)
+          MergeSemantics(
+            child: ListPageRow(
+              spot: Spots.permissionRootMode,
+              subtitle: l10n.rootModeSubtitle,
+              onTap: _busy ? null : () => unawaited(_onRootMode(!rootMode)),
+              trailing: Switch(value: rootMode, onChanged: _busy ? null : (v) => unawaited(_onRootMode(v))),
             ),
           ),
         // The control itself stays on 手机操控: this opens it at that row.

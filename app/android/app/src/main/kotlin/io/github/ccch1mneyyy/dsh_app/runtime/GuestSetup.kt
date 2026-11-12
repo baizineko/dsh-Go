@@ -100,6 +100,23 @@ object GuestSetup {
         return file
     }
 
+    /**
+     * Appended only when 「Root 高级授权模式」 is on and the app really holds root: the agent may
+     * call `su` and use every permission the app was granted, and should pick the strongest
+     * path the device actually offers instead of asking the user for the same thing again.
+     */
+    // l10n:keep agent prompt
+    private val ROOT_SECTION = """
+        |
+        |## Root 高级授权（已开启）
+        |
+        |- 用户已开启「Root 高级授权模式」，App 已拿到设备 root。这个 proot 环境本身不因 root 改变（仍是普通用户命名空间），但你可以用 `su -c '<命令>'` 以 root 身份在**真实 Android 系统**上执行命令，例如查看 /data、/proc、系统属性，或用 `pm`、`cmd`、`settings`、`dumpsys` 完成需要系统权限的操作。
+        |- 这个 App 已被授予全部常见运行时权限（存储与所有文件、相册/视频/音频、录音、相机、通知、精确与后台定位、蓝牙与 Wi-Fi、身体传感器、活动识别、通讯录、日历、短信读取、电话状态与拨号），不需要再让用户去系统设置里逐项点授予。
+        |- 选择方案时按设备真实能力取最省事的那条：能 root 直连就不要绕 ADB 或 Shizuku；能读写系统目录就不要让用户手工导入；需要重启服务（如 `su -c 'cmd package ...'`）可以直接做。
+        |- 仍然要克制：`su` 只用于确实需要特权的那一步，不要把整条流水线都塞进 `su -c`；不要读取或上传与本任务无关的私人数据；不要执行 `rm -rf /`、修改 /system 分区、抹除 `data` 或改动其他 App 数据这类不可逆操作，除非用户明确要求并再次确认。
+        |- 每轮只在真正需要时调用一次 `su`，把多条命令合并成一次调用以减少授权弹窗；如果 `su` 返回 "permission denied" 或不存在，说明 root 已经失效，直说并让用户在设置里重新开启，不要反复重试。
+        |""".trimMargin()
+
     /** Global DSH instructions ($DSH_HOME/AGENTS.md); left alone once the user removes the marker. */
     fun writeAgentsMd(
         rootfs: File,
@@ -107,6 +124,7 @@ object GuestSetup {
         phoneControl: Boolean = false,
         visualReplies: Boolean = true,
         directEngine: Boolean = false,
+        rootMode: Boolean = false,
     ) {
         try {
             val file = File(rootfs, "root/.dsh/AGENTS.md")
@@ -117,7 +135,10 @@ object GuestSetup {
                     .replace("`/root/workspace`", "`${rootfs.canonicalPath}/root/workspace`") +
                     "\n- 文件工具、会话目录、@ 引用、AGENTS 和 skills 使用同一个完整绝对路径；该路径在 shell 内也同名可见。旧的 `/root` 路径仍可用于文件工具。shell 的输出不改写，不要删除路径的前缀。\n"
             } else AGENTS_MD
-            val text = environment.replace(
+            // A root host does not sandbox the proot process, but saying 「免 Root」 would hide the
+            // one capability that actually changed, so the sentence is rewritten instead.
+            val base = if (rootMode) environment.replace("（proot，免 Root）", "（proot，宿主已 Root）") else environment
+            val text = base.replace(
                 "{STORAGE_LINE}",
                 if (phoneStorage) {
                     // l10n:keep agent prompt
@@ -127,6 +148,7 @@ object GuestSetup {
                     "手机相册、下载等用户文件不在这个环境里，看不到；如需访问，请用户在 App 设置里打开「访问手机文件」。"
                 },
             ) + (if (visualReplies) DSH_UI_SECTION else "") +
+                (if (rootMode) ROOT_SECTION else "") +
                 (if (phoneControl) PhoneGuest.AGENTS_SECTION else "") +
                 DIAGNOSTICS_SECTION.replace(
                     "{PATH}",

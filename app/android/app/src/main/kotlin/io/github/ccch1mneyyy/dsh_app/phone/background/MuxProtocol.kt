@@ -10,7 +10,8 @@ internal object MuxProtocol {
     private val reserved = header + Proto.MAX_IN_FLIGHT
     private val optInKeys = setOf(Proto.OP, Proto.REQUEST_MUX_VERSION, Proto.MAX_IN_FLIGHT, Proto.PEER_INSTANCE)
     fun global(request: Bundle): Boolean = request.get(Proto.OP) in setOf(
-        Proto.OP_DESTROY, Proto.OP_GRANT_SECURE_SETTINGS, Proto.OP_RECOVERY_RETIRE, Proto.OP_RECOVERY_CHECK)
+        Proto.OP_DESTROY, Proto.OP_GRANT_SECURE_SETTINGS, Proto.OP_GRANT_APP_PERMISSIONS,
+        Proto.OP_RECOVERY_RETIRE, Proto.OP_RECOVERY_CHECK)
     fun destroyed(request: Bundle, response: Bundle): Boolean = request.get(Proto.OP) == Proto.OP_DESTROY && response.get(Proto.OK) == true
     fun hasHeader(value: Bundle): Boolean = reserved.any(value::containsKey)
 

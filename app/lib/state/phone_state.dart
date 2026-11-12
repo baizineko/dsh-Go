@@ -292,6 +292,10 @@ class PhoneController extends Notifier<PhoneState> {
   /// Only an explicit tap: refresh, build and status events never prepare root.
   Future<PhoneResult> prepareRoot() => _ifSupported(PhonePrivilegedMode.root, _channel.prepareRoot);
 
+  /// 「Root 高级授权模式」: after [prepareRoot] succeeds, grants the whole fixed permission
+  /// list in one root round trip. Refusals land in [PhoneResult.denied].
+  Future<PhoneResult> grantRootPermissions() => _ifSupported(PhonePrivilegedMode.root, _channel.grantRootPermissions);
+
   Future<PhoneResult> _ifSupported(PhonePrivilegedMode mode, Future<PhoneResult> Function() action) =>
       state.status.background.supportedModes.contains(mode)
       ? _thenRefresh(action())
