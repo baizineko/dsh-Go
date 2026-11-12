@@ -1,0 +1,119 @@
+# Builds an installable APK on demand. This is not the release pipeline: it exists so a
+# branch can be put on a phone and tested before it lands. The APK is built exactly like
+# tooling/build-apk.sh does it (runtime bundle first, then a release flutter build), but
+# it carries the debug key because this repository has no key.properties, and it is
+# uploaded as a workflow artifact instead of being published anywhere.
+name: Build APK
+on:
+  workflow_dispatch:
+    inputs:
+      flavor:
+        description: ABI flavor to build
+        type: choice
+        options: [arm64, x64]
+        default: arm64
+      mode:
+        description: Build mode (release bundles the runtime; debug skips it)
+        type: choice
+        options: [release, debug]
+        default: release
+permissions:
+  contents: read
+# One build per ref: a second dispatch replaces the first instead of competing for the
+# same artifact name.
+concurrency:
+  group: build-apk-${{ github.ref }}-${{ inputs.flavor }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.47.7
+  NODE_VERSION: 24.22.1
+  TZ: Asia/Shanghai
+
+jobs:
+  apk:
+    name: APK ${{ inputs.flavor }} (${{ inputs.mode }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # Node is not used by the app: runtime/build-runtime.sh runs npm on the host to
+      # warm the package cache and to install pnpm, so the version must match NODE_VERSION.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      # apt-get for the host tools build-runtime.sh checks for; xz and gpgv are not on the
+      # runner image, and the Ubuntu package resolution needs gpgv to verify InRelease.
+      - name: Host tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q xz-utils gpgv
+      # runtime/out is gitignored: the rootfs, node and the proot binaries are rebuilt from
+      # pinned, checksum-verified inputs on every build. Release builds refuse to run without
+      # it (tooling/check_runtime_bundle.py), because an APK without a runtime cannot boot.
+      - name: Runtime bundle
+        if: inputs.mode == 'release'
+        run: runtime/build-runtime.sh ${{ inputs.flavor }}
+      - name: Dependencies
+        working-directory: app
+        run: flutter pub get --enforce-lockfile
+      # build-apk.sh also builds libtawcroot.so here. Without it the APK still builds and the
+      # tawcroot launch option reports itself unavailable, which is what a test build wants:
+      # ndkVersion has to be downloaded for it, and it is not part of what is being tested.
+      - name: Build
+        working-directory: app
+        run: |
+          args=(build apk "--${{ inputs.mode }}" --flavor ${{ inputs.flavor }})
+          if [[ "${{ inputs.mode }}" == release ]]; then
+            args+=(--target-platform android-${{ inputs.flavor }})
+          fi
+          version=$(sed -n 's/^version:[[:space:]]*\([^+[:space:]]*\).*/\1/p' pubspec.yaml)
+          code=$(python3 ../tooling/build_number.py)
+          echo "DSH_BUILD=$version+$code" >>"$GITHUB_ENV"
+          flutter "${args[@]}" --build-name "$version" --build-number "$code"
+      - name: Collect
+        run: |
+          # Flutter names it app-$flavor-$buildType.apk (app-<abi>-... only with
+          # --split-per-abi, which the flavors make unnecessary).
+          src="app/build/app/outputs/flutter-apk/app-${{ inputs.flavor }}-${{ inputs.mode }}.apk"
+          [[ -f "$src" ]] || src=$(ls app/build/app/outputs/flutter-apk/app-*-${{ inputs.mode }}.apk 2>/dev/null | head -n 1)
+          [[ -n "$src" && -f "$src" ]] || { echo "no APK was produced" >&2; ls -R app/build/app/outputs >&2 || true; exit 1; }
+          name="dsh-go-${{ inputs.flavor }}-${{ inputs.mode }}-$DSH_BUILD.apk"
+          cp "$src" "$name"
+          sha256sum "$name" | tee "$name.sha256"
+          # Record what the APK says about itself, so the artifact can be matched to a commit.
+          sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}
+          aapt2=$(ls -1d "$sdk"/build-tools/*/aapt2 2>/dev/null | sort -V | tail -n 1 || true)
+          [[ -n "$aapt2" ]] && "$aapt2" dump badging "$name" | sed -n '/^package:/p'
+          echo "DSH_APK=$name" >>"$GITHUB_ENV"
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: dsh-go-${{ inputs.flavor }}-${{ inputs.mode }}
+          path: |
+            ${{ env.DSH_APK }}
+            ${{ env.DSH_APK }}.sha256
+          if-no-files-found: error
+      - name: How to install
+        run: |
+          cat >>"$GITHUB_STEP_SUMMARY" <<'EOF'
+          ### Installing this build
+
+          1. Download the artifact, unzip it, and `adb install -r <apk>`.
+          2. It is signed with the **debug key** (this repository has no `key.properties`),
+             so it cannot be installed over a build signed with the release key. Uninstall
+             the existing app first, which also deletes its data.
+
+          The runtime bundle is built into a release APK, so Root mode and the engine work
+          as they do in a real build. A debug APK has no runtime and cannot start the engine.
+          EOF
