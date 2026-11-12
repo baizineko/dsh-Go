@@ -62,9 +62,16 @@ jobs:
       # runtime/out is gitignored: the rootfs, node and the proot binaries are rebuilt from
       # pinned, checksum-verified inputs on every build. Release builds refuse to run without
       # it (tooling/check_runtime_bundle.py), because an APK without a runtime cannot boot.
+      # build-runtime.sh names ABIs (arm64-v8a/x86_64) while the Gradle flavors are arm64/x64.
       - name: Runtime bundle
         if: inputs.mode == 'release'
-        run: runtime/build-runtime.sh ${{ inputs.flavor }}
+        run: |
+          case "${{ inputs.flavor }}" in
+            arm64) abi=arm64-v8a ;;
+            x64) abi=x86_64 ;;
+            *) echo "no ABI for flavor ${{ inputs.flavor }}" >&2; exit 1 ;;
+          esac
+          runtime/build-runtime.sh "$abi"
       - name: Dependencies
         working-directory: app
         run: flutter pub get --enforce-lockfile
